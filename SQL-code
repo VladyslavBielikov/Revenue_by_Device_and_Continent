@@ -1,0 +1,60 @@
+/*Group information by continent*/
+WITH session_events AS (
+    SELECT
+        sp.continent,
+        COUNT(*) AS total_events
+    FROM `data-analytics-mate.DA.session_params` AS sp
+    GROUP BY sp.continent
+),
+/*Calculating total revenue and revenue by device*/
+revenue_cnt AS (
+    SELECT
+        sp.continent,
+        SUM(p.price) AS revenue,
+        SUM(CASE WHEN sp.device = 'mobile' THEN p.price END) AS Revenue_from_Mobile,
+        SUM(CASE WHEN sp.device = 'desktop' THEN p.price END) AS Revenue_from_Desktop
+    FROM `data-analytics-mate.DA.order` AS o
+    INNER JOIN `data-analytics-mate.DA.product` AS p
+        ON p.item_id = o.item_id
+    INNER JOIN `data-analytics-mate.DA.session_params` AS sp
+        ON o.ga_session_id = sp.ga_session_id
+    GROUP BY sp.continent
+),
+/*Calculate the total count of accounts and the sum of verified accounts by continent*/
+account_cnt AS (
+    SELECT
+        sp.continent,
+        COUNT(DISTINCT acc_ses.account_id) AS account_count,
+        SUM(acc.is_verified) AS verified_account
+    FROM `data-analytics-mate.DA.session_params` AS sp
+    INNER JOIN `data-analytics-mate.DA.account_session` AS acc_ses
+        ON sp.ga_session_id = acc_ses.ga_session_id
+    INNER JOIN `data-analytics-mate.DA.account` AS acc
+        ON acc_ses.account_id = acc.id
+    GROUP BY sp.continent
+),
+/*Calculate the total count of sessions by continent*/
+
+session_cnt AS (
+    SELECT
+        sp.continent,
+        COUNT(DISTINCT acc_ses.ga_session_id) AS session_count
+    FROM `data-analytics-mate.DA.session_params` AS sp
+    INNER JOIN `data-analytics-mate.DA.account_session` AS acc_ses
+        ON sp.ga_session_id = acc_ses.ga_session_id
+    GROUP BY sp.continent
+)
+/*Create a summary table*/
+SELECT
+    r.continent,
+    r.revenue,
+    r.Revenue_from_Mobile,
+    r.Revenue_from_Desktop,
+    r.revenue / SUM(r.revenue) OVER () * 100 AS perc_Revenue_from_Total,
+    a.account_count,
+    a.verified_account,
+    s.session_count,
+FROM revenue_cnt r
+LEFT JOIN account_cnt a ON r.continent = a.continent
+LEFT JOIN session_cnt s ON r.continent = s.continent
+LEFT JOIN session_events se ON r.continent = se.continent;
